@@ -1,0 +1,74 @@
+# Walking skeleton: 3 microservicios + broker + gateway + sistema externo simulado.
+# Arranque:  docker compose up --build
+name: citas-medicas
+
+x-servicio-java: &servicio-java
+  environment:
+    RABBITMQ_HOST: rabbitmq
+    EPS_URL: http://eps-simulador:8080
+    TZ: America/Bogota
+  depends_on:
+    rabbitmq:
+      condition: service_healthy
+  restart: on-failure
+
+services:
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    user: rabbitmq      # evita que .erlang.cookie quede como root (error eacces en Docker Desktop)
+    environment:
+      # Sin espera activa de los planificadores de Erlang: en equipos con 2 CPU no acapara el procesador
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "+sbwt none +sbwtdcpu none +sbwtdio none"
+    ulimits:
+      nofile: 65536
+    ports:
+      - "5672:5672"
+      - "15672:15672"   # consola: http://localhost:15672 (guest / guest)
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  eps-simulador:
+    image: wiremock/wiremock:3.9.1
+    ports:
+      - "8090:8080"
+    volumes:
+      - ./servicios/eps-simulador/mappings:/home/wiremock/mappings:ro
+
+  agenda:
+    <<: *servicio-java
+    build: ./servicios/agenda-service
+    ports:
+      - "8081:8081"
+
+  historia-clinica:
+    <<: *servicio-java
+    build: ./servicios/historia-clinica-service
+    ports:
+      - "8082:8082"
+
+  notificaciones:
+    <<: *servicio-java
+    build: ./servicios/notificaciones-service
+    ports:
+      - "8083:8083"
+
+  gateway:
+    build:
+      context: ./servicios/gateway
+      additional_contexts:
+        # Repositorio hermano SistemaSitasMedicasFrontend, clonado junto a este
+        frontend: ${FRONTEND_DIR:-../SistemaSitasMedicasFrontend/frontend}
+    ports:
+      - "8080:80"       # portal + API: http://localhost:8080
+    depends_on:
+      - agenda
+      - historia-clinica
+      - notificaciones
+
+volumes:
+  rabbitmq-data:

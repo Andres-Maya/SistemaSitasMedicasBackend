@@ -1,0 +1,44 @@
+{
+  "mappings": [
+    {
+      "name": "EPS niega la autorizacion (documentos que empiezan por 999)",
+      "priority": 1,
+      "request": {
+        "method": "POST",
+        "url": "/autorizaciones",
+        "bodyPatterns": [{ "matchesJsonPath": { "expression": "$.documentNumber", "matches": "^999.*" } }]
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "decision": "NEGADA", "motivo": "Usuario sin cobertura para la especialidad" }
+      }
+    },
+    {
+      "name": "EPS lenta: responde en 5 s, por encima del timeout de 2 s (documentos que empiezan por 888)",
+      "priority": 1,
+      "request": {
+        "method": "POST",
+        "url": "/autorizaciones",
+        "bodyPatterns": [{ "matchesJsonPath": { "expression": "$.documentNumber", "matches": "^888.*" } }]
+      },
+      "response": {
+        "status": 200,
+        "fixedDelayMilliseconds": 5000,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "decision": "APROBADA", "numeroAutorizacion": "AUT-TARDIA" }
+      }
+    },
+    {
+      "name": "EPS aprueba (caso por defecto)",
+      "priority": 10,
+      "request": { "method": "POST", "url": "/autorizaciones" },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "decision": "APROBADA", "numeroAutorizacion": "AUT-{{randomValue length=6 type='NUMERIC'}}" },
+        "transformers": ["response-template"]
+      }
+    }
+  ]
+}
